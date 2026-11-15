@@ -36,3 +36,6 @@ data/              <table>.schema, <table>.csv
 ```sql
 SELECT name, * FROM students WHERE _id = 2;   -- * 는 어디든, 여러 번 쓸 수 있음
 ```
+
+## 범위 밖
+- 접근 제어(사용자 인증, 권한): 이번 과제에서는 지원하지 않습니다. `data/` 파일은 OS 파일 권한으로만 보호됩니다.
