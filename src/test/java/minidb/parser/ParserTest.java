@@ -23,10 +23,22 @@ class ParserTest {
                 "INSERT students VALUES ('kim');",
                 "INSERT INTO students VALUES ();",
                 "INSERT INTO students VALUES ('a' 'b');",
-                "SELECT * FROM students;",
+                "SELECT name FROM students;", // 이번 유닛은 * 만
+                "SELECT * students;",
+                "SELECT * FROM students", // ; 없음
+                "DELETE FROM students;",
                 "'oops")) {
             assertNotNull(Parser.parse(in).error(), in);
         }
+    }
+
+    @Test
+    void parseSelectMixedWithInsert() {
+        var r = Parser.parse("INSERT INTO students VALUES ('kim');\nselect * from students;");
+        assertNull(r.error());
+        assertEquals(List.of(
+                new InsertStmt("students", List.of(new Token(STRING, "kim"))),
+                new SelectStmt("students")), r.stmts());
     }
 
     @Test

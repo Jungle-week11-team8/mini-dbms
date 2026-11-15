@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import minidb.DbException;
 import minidb.parser.InsertStmt;
+import minidb.parser.SelectStmt;
 import minidb.parser.Token;
 import minidb.parser.Token.Kind;
 import minidb.storage.Storage;
@@ -53,6 +54,15 @@ public final class Executor {
             row.add(v.value());
         }
         Storage.appendRow(dir, s.table(), row);
+    }
+
+    /** SELECT의 결과: schema 순서의 컬럼 이름과 CSV의 모든 행. */
+    public record QueryResult(List<String> columns, List<List<String>> rows) {}
+
+    public QueryResult select(SelectStmt s) throws DbException {
+        Schema schema = Storage.loadSchema(dir, s.table()); // 없는 테이블이면 여기서 오류
+        List<String> columns = schema.columns().stream().map(Column::name).toList();
+        return new QueryResult(columns, Storage.readRows(dir, s.table()));
     }
 
     /** id를 하나 예약한다. appendRow가 실패하면 그 id는 건너뛰어진다(중복은 없음). */

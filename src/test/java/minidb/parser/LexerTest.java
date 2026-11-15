@@ -18,6 +18,15 @@ class LexerTest {
     }
 
     @Test
+    void lexSelect() {
+        var r = Lexer.lex("select * From students;");
+        assertNull(r.error());
+        assertEquals(List.of(
+                new Token(KEYWORD, "SELECT"), new Token(SYMBOL, "*"), new Token(KEYWORD, "FROM"),
+                new Token(IDENT, "students"), new Token(SYMBOL, ";")), r.tokens());
+    }
+
+    @Test
     void negativeNumber() {
         var r = Lexer.lex("-7");
         assertNull(r.error());

@@ -9,7 +9,7 @@ public final class Parser {
      * 문법 오류가 나면 그 앞까지 파싱된 문장과 오류를 함께 돌려준다
      * (앞 문장은 실행하고 오류 지점에서 멈추기 위해). error는 오류가 없으면 null.
      */
-    public record Result(List<InsertStmt> stmts, String error) {}
+    public record Result(List<Statement> stmts, String error) {}
 
     private static final class SyntaxError extends Exception {
         SyntaxError(String message) {
@@ -28,10 +28,10 @@ public final class Parser {
     public static Result parse(String src) {
         Lexer.Result lex = Lexer.lex(src);
         Parser p = new Parser(lex.tokens());
-        List<InsertStmt> stmts = new ArrayList<>();
+        List<Statement> stmts = new ArrayList<>();
         while (p.pos < p.toks.size()) {
             try {
-                stmts.add(p.insert());
+                stmts.add(p.statement());
             } catch (SyntaxError e) {
                 // 잘린 문장의 원인은 토큰화 오류
                 String msg = lex.error() != null && p.pos >= p.toks.size() ? lex.error() : e.getMessage();
@@ -58,14 +58,30 @@ public final class Parser {
         }
     }
 
-    private InsertStmt insert() throws SyntaxError {
+    private Statement statement() throws SyntaxError {
         Token t = next();
-        if (t.kind() != Kind.KEYWORD || !t.value().equals("INSERT")) {
-            throw new SyntaxError("지원하지 않는 명령어: " + q(t.value()));
-        }
-        expect(Kind.KEYWORD, "INTO");
+        if (t.kind() == Kind.KEYWORD && t.value().equals("INSERT")) return insert();
+        if (t.kind() == Kind.KEYWORD && t.value().equals("SELECT")) return select();
+        throw new SyntaxError("지원하지 않는 명령어: " + q(t.value()));
+    }
+
+    private String tableName() throws SyntaxError {
         Token name = next();
         if (name == null || name.kind() != Kind.IDENT) throw new SyntaxError("테이블 이름이 필요합니다");
+        return name.value();
+    }
+
+    private SelectStmt select() throws SyntaxError {
+        expect(Kind.SYMBOL, "*");
+        expect(Kind.KEYWORD, "FROM");
+        String table = tableName();
+        expect(Kind.SYMBOL, ";");
+        return new SelectStmt(table);
+    }
+
+    private InsertStmt insert() throws SyntaxError {
+        expect(Kind.KEYWORD, "INTO");
+        String table = tableName();
         expect(Kind.KEYWORD, "VALUES");
         expect(Kind.SYMBOL, "(");
         List<Token> values = new ArrayList<>();
@@ -80,6 +96,6 @@ public final class Parser {
             if (!new Token(Kind.SYMBOL, ",").equals(sep)) throw new SyntaxError("',' 또는 ')'가 필요합니다");
         }
         expect(Kind.SYMBOL, ";");
-        return new InsertStmt(name.value(), values);
+        return new InsertStmt(table, values);
     }
 }

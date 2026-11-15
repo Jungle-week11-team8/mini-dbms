@@ -56,6 +56,40 @@ class MainTest {
     }
 
     @Test
+    void selectPrintsTable() throws Exception {
+        int code = runSql("INSERT INTO students VALUES ('kim');\nINSERT INTO students VALUES ('O''Brien');\nSELECT * FROM students;");
+        assertEquals(0, code, errOut.toString(UTF_8));
+        assertEquals("""
+                INSERT 1
+                INSERT 1
+                +----+---------+
+                | id | name    |
+                +----+---------+
+                | 1  | kim     |
+                | 2  | O'Brien |
+                +----+---------+
+                2 rows
+                """, out.toString(UTF_8).replace("\r\n", "\n"));
+    }
+
+    @Test
+    void selectEmptyTablePrintsHeaderAndZeroRows() throws Exception {
+        assertEquals(0, runSql("select * from students;"), errOut.toString(UTF_8));
+        assertEquals("""
+                +----+------+
+                | id | name |
+                +----+------+
+                0 rows
+                """, out.toString(UTF_8).replace("\r\n", "\n"));
+    }
+
+    @Test
+    void selectMissingTableFails() throws Exception {
+        assertEquals(1, runSql("SELECT * FROM nope;"));
+        assertTrue(errOut.toString(UTF_8).contains("1번째 문장"));
+    }
+
+    @Test
     void usageErrors() {
         var o = new PrintStream(out, true, UTF_8);
         assertEquals(1, Main.run(new String[0], data(), o, o));
