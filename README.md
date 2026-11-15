@@ -12,6 +12,7 @@ java -version   # 확인
 ```bash
 ./gradlew test                                   # 테스트
 ./gradlew run --args="examples/insert.sql"       # 실행 (data/ 는 프로젝트 루트 기준)
+./gradlew run --args="examples/select.sql"       # SELECT * 결과를 표로 출력
 ```
 
 Windows는 `./gradlew` 대신 `gradlew.bat`을 쓰세요.
@@ -19,9 +20,10 @@ Windows는 `./gradlew` 대신 `gradlew.bat`을 쓰세요.
 ## 구조
 ```
 src/main/java/minidb/
-  Main.java        진입점
-  parser/          Lexer, Parser
-  executor/        Executor (INSERT 실행, id 자동 부여)
+  Main.java        진입점 (문장 종류별로 실행, 결과 출력)
+  TablePrinter     SELECT 결과를 표 + "N rows"로 출력
+  parser/          Lexer, Parser → Statement(InsertStmt | SelectStmt)
+  executor/        Executor (INSERT 실행·id 자동 부여, SELECT * 조회)
   storage/         Storage (schema JSON + CSV 읽기/쓰기)
 data/              <table>.schema, <table>.csv
 ```
