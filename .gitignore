@@ -1,0 +1,6 @@
+*.exe
+/bin/
+.DS_Store
+.gradle/
+build/
+.idea
