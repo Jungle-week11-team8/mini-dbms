@@ -26,7 +26,7 @@ class ExecutorTest {
     @BeforeEach
     void setup() throws Exception {
         Files.writeString(dir.resolve("students.schema"),
-                "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"age\",\"type\":\"INT\"}]}");
+                "{\"columns\":[{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"age\",\"type\":\"INT\"}]}");
     }
 
     static InsertStmt ins(String table, Token... vals) {
@@ -48,7 +48,7 @@ class ExecutorTest {
         Map<String, InsertStmt> cases = Map.of(
                 "없는 테이블", ins("nope", KIM, N20),
                 "테이블명 대소문자", ins("Students", KIM, N20),
-                "id 직접 입력", ins("students", N20, KIM, N20),
+                "_id 직접 입력(값 초과)", ins("students", N20, KIM, N20),
                 "값 부족", ins("students", KIM),
                 "INT 자리에 문자열", ins("students", KIM, KIM),
                 "TEXT 자리에 숫자", ins("students", N20, N20));
@@ -62,14 +62,14 @@ class ExecutorTest {
         e.insert(ins("students", KIM, N20));
         e.insert(ins("students", LEE, N20));
         var r = e.select(new SelectStmt("students"));
-        assertEquals(List.of("id", "name", "age"), r.columns());
+        assertEquals(List.of("_id", "name", "age"), r.columns());
         assertEquals(List.of(List.of("1", "kim", "20"), List.of("2", "lee", "20")), r.rows());
     }
 
     @Test
     void selectEmptyTable() throws DbException {
         var r = new Executor(dir).select(new SelectStmt("students"));
-        assertEquals(List.of("id", "name", "age"), r.columns());
+        assertEquals(List.of("_id", "name", "age"), r.columns());
         assertTrue(r.rows().isEmpty());
     }
 
@@ -77,5 +77,85 @@ class ExecutorTest {
     void selectMissingTable() {
         assertThrows(DbException.class, () -> new Executor(dir).select(new SelectStmt("nope")));
         assertThrows(DbException.class, () -> new Executor(dir).select(new SelectStmt("Students")));
+    }
+
+    static SelectStmt sel(List<String> cols, String whereCol, Token whereVal) {
+        return new SelectStmt("students", cols, whereCol == null ? null : new SelectStmt.Where(whereCol, whereVal));
+    }
+
+    void seed() throws DbException {
+        var e = new Executor(dir);
+        e.insert(ins("students", KIM, N20));
+        e.insert(ins("students", LEE, new Token(NUMBER, "21")));
+        e.insert(ins("students", KIM, new Token(NUMBER, "22")));
+    }
+
+    @Test
+    void selectColumnsInRequestedOrderIgnoringCase() throws DbException {
+        seed();
+        var r = new Executor(dir).select(sel(List.of("AGE", "Name"), null, null));
+        assertEquals(List.of("age", "name"), r.columns()); // 헤더는 schema 표기
+        assertEquals(List.of(List.of("20", "kim"), List.of("21", "lee"), List.of("22", "kim")), r.rows());
+    }
+
+    @Test
+    void selectWhereText() throws DbException {
+        seed();
+        var r = new Executor(dir).select(sel(List.of("_ID"), "NAME", KIM));
+        assertEquals(List.of(List.of("1"), List.of("3")), r.rows());
+    }
+
+    @Test
+    void selectWhereIntComparesAsNumber() throws DbException {
+        seed();
+        var r = new Executor(dir).select(sel(List.of("*"), "age", new Token(NUMBER, "021")));
+        assertEquals(List.of(List.of("2", "lee", "21")), r.rows());
+    }
+
+    @Test
+    void selectWhereNoMatchIsEmptyNotError() throws DbException {
+        seed();
+        var r = new Executor(dir).select(sel(List.of("*"), "_id", new Token(NUMBER, "99")));
+        assertEquals(List.of("_id", "name", "age"), r.columns());
+        assertTrue(r.rows().isEmpty());
+    }
+
+    @Test
+    void selectErrors() throws DbException {
+        seed();
+        Map<String, SelectStmt> cases = Map.of(
+                "없는 컬럼", sel(List.of("nope"), null, null),
+                "WHERE 없는 컬럼", sel(List.of("*"), "nope", KIM),
+                "INT 컬럼에 문자열", sel(List.of("*"), "age", new Token(STRING, "20")),
+                "TEXT 컬럼에 숫자", sel(List.of("*"), "name", N20));
+        cases.forEach((name, s) -> assertThrows(DbException.class, () -> new Executor(dir).select(s), name));
+    }
+
+    @Test
+    void starExpandsInPlace() throws DbException {
+        seed();
+        var r = new Executor(dir).select(sel(List.of("name", "*"), "_id", new Token(NUMBER, "2")));
+        assertEquals(List.of("name", "_id", "name", "age"), r.columns());
+        assertEquals(List.of(List.of("lee", "2", "lee", "21")), r.rows());
+    }
+
+    @Test
+    void schemaColumnNamedIdIsOrdinaryColumn() throws Exception {
+        Files.writeString(dir.resolve("t.schema"),
+                "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"}]}");
+        var e = new Executor(dir);
+        e.insert(new InsertStmt("t", List.of(new Token(NUMBER, "100"), KIM))); // id는 사용자가 넣는 일반 컬럼
+        var r = e.select(new SelectStmt("t"));
+        assertEquals(List.of("_id", "id", "name"), r.columns());
+        assertEquals(List.of(List.of("1", "100", "kim")), r.rows());
+    }
+
+    @Test
+    void schemaWithSystemColumnNameIsError() throws Exception {
+        Files.writeString(dir.resolve("bad.schema"),
+                "{\"columns\":[{\"name\":\"_ID\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"}]}");
+        var e = new Executor(dir);
+        assertThrows(DbException.class, () -> e.insert(new InsertStmt("bad", List.of(N20, KIM))));
+        assertThrows(DbException.class, () -> e.select(new SelectStmt("bad")));
     }
 }

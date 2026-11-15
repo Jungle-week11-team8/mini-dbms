@@ -10,7 +10,7 @@ public final class Lexer {
     public record Result(List<Token> tokens, String error) {}
 
     // 키워드는 대소문자 무시(대문자로 정규화), 식별자는 원문 유지.
-    private static final Set<String> KEYWORDS = Set.of("INSERT", "INTO", "VALUES", "SELECT", "FROM");
+    private static final Set<String> KEYWORDS = Set.of("INSERT", "INTO", "VALUES", "SELECT", "FROM", "WHERE");
 
     private Lexer() {}
 
@@ -21,7 +21,7 @@ public final class Lexer {
             char c = src.charAt(i);
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
                 i++;
-            } else if ("(),;*".indexOf(c) >= 0) {
+            } else if ("(),;*=".indexOf(c) >= 0) {
                 toks.add(new Token(Kind.SYMBOL, String.valueOf(c)));
                 i++;
             } else if (c == '\'') {

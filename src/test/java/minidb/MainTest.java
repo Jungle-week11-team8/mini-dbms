@@ -23,7 +23,7 @@ class MainTest {
     int runSql(String sql) throws Exception {
         Files.createDirectories(data());
         Files.writeString(data().resolve("students.schema"),
-                "{\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"}]}");
+                "{\"columns\":[{\"name\":\"name\",\"type\":\"TEXT\"}]}");
         Path q = dir.resolve("q.sql");
         Files.writeString(q, sql);
         return Main.run(new String[] {q.toString()}, data(), new PrintStream(out, true, UTF_8), new PrintStream(errOut, true, UTF_8));
@@ -62,12 +62,12 @@ class MainTest {
         assertEquals("""
                 INSERT 1
                 INSERT 1
-                +----+---------+
-                | id | name    |
-                +----+---------+
-                | 1  | kim     |
-                | 2  | O'Brien |
-                +----+---------+
+                +-----+---------+
+                | _id | name    |
+                +-----+---------+
+                | 1   | kim     |
+                | 2   | O'Brien |
+                +-----+---------+
                 2 rows
                 """, out.toString(UTF_8).replace("\r\n", "\n"));
     }
@@ -76,9 +76,9 @@ class MainTest {
     void selectEmptyTablePrintsHeaderAndZeroRows() throws Exception {
         assertEquals(0, runSql("select * from students;"), errOut.toString(UTF_8));
         assertEquals("""
-                +----+------+
-                | id | name |
-                +----+------+
+                +-----+------+
+                | _id | name |
+                +-----+------+
                 0 rows
                 """, out.toString(UTF_8).replace("\r\n", "\n"));
     }
@@ -87,6 +87,37 @@ class MainTest {
     void selectMissingTableFails() throws Exception {
         assertEquals(1, runSql("SELECT * FROM nope;"));
         assertTrue(errOut.toString(UTF_8).contains("1번째 문장"));
+    }
+
+    @Test
+    void selectColumnsWhere() throws Exception {
+        int code = runSql("""
+                INSERT INTO students VALUES ('kim');
+                INSERT INTO students VALUES ('lee');
+                SELECT NAME FROM students WHERE _id = 2;
+                SELECT _id FROM students WHERE name = 'nobody';
+                """);
+        assertEquals(0, code, errOut.toString(UTF_8));
+        assertEquals("""
+                INSERT 1
+                INSERT 1
+                +------+
+                | name |
+                +------+
+                | lee  |
+                +------+
+                1 rows
+                +-----+
+                | _id |
+                +-----+
+                0 rows
+                """, out.toString(UTF_8).replace("\r\n", "\n"));
+    }
+
+    @Test
+    void selectWhereTypeMismatchFails() throws Exception {
+        assertEquals(1, runSql("SELECT * FROM students WHERE _id = '1';"));
+        assertTrue(errOut.toString(UTF_8).contains("INT 타입에 맞지 않는 값"), errOut.toString(UTF_8));
     }
 
     @Test

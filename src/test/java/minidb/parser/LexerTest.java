@@ -27,6 +27,14 @@ class LexerTest {
     }
 
     @Test
+    void lexWhere() {
+        var r = Lexer.lex("where age=20");
+        assertNull(r.error());
+        assertEquals(List.of(new Token(KEYWORD, "WHERE"), new Token(IDENT, "age"), new Token(SYMBOL, "="),
+                new Token(NUMBER, "20")), r.tokens());
+    }
+
+    @Test
     void negativeNumber() {
         var r = Lexer.lex("-7");
         assertNull(r.error());
