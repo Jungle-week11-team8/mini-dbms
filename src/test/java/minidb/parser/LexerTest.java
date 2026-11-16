@@ -42,8 +42,45 @@ class LexerTest {
     }
 
     @Test
+    void comments() {
+        var r = Lexer.lex("--insert\nselect /* 여러\n줄 */ * -- 줄 끝\nfrom t; /**/ -- 줄바꿈 없이 끝");
+        assertNull(r.error());
+        assertEquals(List.of(
+                new Token(KEYWORD, "SELECT"), new Token(SYMBOL, "*"), new Token(KEYWORD, "FROM"),
+                new Token(IDENT, "t"), new Token(SYMBOL, ";")), r.tokens());
+    }
+
+    @Test
+    void commentOnly() {
+        var r = Lexer.lex("-- a\n/* b */");
+        assertNull(r.error());
+        assertEquals(List.of(), r.tokens());
+    }
+
+    @Test
+    void commentMarkersInsideStringAreKept() {
+        var r = Lexer.lex("'a -- b /* c */' -7");
+        assertNull(r.error());
+        assertEquals(List.of(new Token(STRING, "a -- b /* c */"), new Token(NUMBER, "-7")), r.tokens());
+    }
+
+    @Test
+    void blockCommentsDoNotNest() {
+        var r = Lexer.lex("/* a /* b */ c */");
+        assertEquals(List.of(new Token(IDENT, "c"), new Token(SYMBOL, "*")), r.tokens());
+        assertEquals("알 수 없는 문자: '/'", r.error());
+    }
+
+    @Test
+    void unterminatedBlockComment() {
+        var r = Lexer.lex("select /* 안 닫힘");
+        assertEquals(List.of(new Token(KEYWORD, "SELECT")), r.tokens());
+        assertEquals("주석이 닫히지 않았습니다", r.error());
+    }
+
+    @Test
     void errors() {
-        for (String in : List.of("'unterminated", "INSERT @", "-")) {
+        for (String in : List.of("'unterminated", "INSERT @", "-", "/", "//x", "/*")) {
             assertNotNull(Lexer.lex(in).error(), in);
         }
     }

@@ -21,6 +21,7 @@ tasks.withType(JavaCompile).configureEach {
 
 application {
     mainClass = 'minidb.Main'
+    applicationDefaultJvmArgs = ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8']
 }
 
 tasks.test {

@@ -21,6 +21,12 @@ public final class Lexer {
             char c = src.charAt(i);
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
                 i++;
+            } else if (src.startsWith("--", i)) { // 줄 끝까지 주석
+                while (i < n && src.charAt(i) != '\n') i++;
+            } else if (src.startsWith("/*", i)) { // 처음 만나는 */ 까지 주석(중첩 없음)
+                int end = src.indexOf("*/", i + 2);
+                if (end < 0) return new Result(toks, "주석이 닫히지 않았습니다");
+                i = end + 2;
             } else if ("(),;*=".indexOf(c) >= 0) {
                 toks.add(new Token(Kind.SYMBOL, String.valueOf(c)));
                 i++;
