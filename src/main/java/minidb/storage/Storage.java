@@ -52,12 +52,15 @@ public final class Storage {
         }
     }
 
-    public static void appendRow(Path dir, String table, List<String> row) throws DbException {
+    /** 행을 파일 끝에 덧붙이고, 그 행이 시작하는 바이트 오프셋(쓰기 직전의 파일 크기)을 돌려준다. */
+    public static long appendRow(Path dir, String table, List<String> row) throws DbException {
         StringJoiner line = new StringJoiner(",", "", "\n");
         for (String v : row) line.add(needsQuotes(v) ? "\"" + v.replace("\"", "\"\"") + "\"" : v);
+        Path f = dir.resolve(table + ".csv");
         try {
-            Files.writeString(dir.resolve(table + ".csv"), line.toString(),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            long offset = Files.exists(f) ? Files.size(f) : 0;
+            Files.writeString(f, line.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            return offset;
         } catch (IOException e) {
             throw new DbException(e.toString(), e);
         }

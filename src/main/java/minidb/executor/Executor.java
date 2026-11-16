@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import minidb.DbException;
+import minidb.index.BPlusTree;
 import minidb.parser.InsertStmt;
 import minidb.parser.SelectStmt;
 import minidb.parser.Token;
@@ -16,6 +17,13 @@ import minidb.storage.Storage.Column;
 public final class Executor {
     private final Path dir;
     private final Map<String, Long> nextId = new HashMap<>(); // 테이블별 다음 _id, 처음 쓸 때 CSV를 스캔해 채움
+
+    // 테이블별 _id 인덱스(_id → CSV 바이트 오프셋). 그 테이블에 처음 INSERT할 때 만든다.
+    // 지금은 이번 실행에서 INSERT한 행만 들어 있고, 아직 조회에 쓰이지 않는다.
+    private final Map<String, BPlusTree> indexes = new HashMap<>();
+
+    /** 인덱스 노드당 최대 키 개수. 벤치마크 전까지의 임시값. */
+    private static final int INDEX_MAX_KEYS = 128;
 
     /** 모든 테이블에 붙는 시스템 컬럼. CSV의 첫 필드이고 schema에는 적지 않는다. */
     public static final Column SYSTEM_ID = new Column("_id", "INT");
@@ -32,13 +40,16 @@ public final class Executor {
         }
 
         List<String> row = new ArrayList<>();
-        row.add(String.valueOf(takeId(s.table())));
+        long id = takeId(s.table());
+        row.add(String.valueOf(id));
         for (int i = 0; i < cols.size(); i++) {
             Token v = s.values().get(i);
             checkType(s.table(), cols.get(i), v);
             row.add(v.value());
         }
-        Storage.appendRow(dir, s.table(), row);
+        // CSV에 먼저 쓰고, 성공했을 때만 인덱스에 등록한다(쓰기가 실패하면 트리는 그대로).
+        long offset = Storage.appendRow(dir, s.table(), row);
+        indexes.computeIfAbsent(s.table(), t -> new BPlusTree(INDEX_MAX_KEYS)).insert(id, offset);
     }
 
     /** SELECT의 결과: schema 순서의 컬럼 이름과 CSV의 모든 행. */
