@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import minidb.DbException;
 import minidb.index.BPlusTree;
 import minidb.parser.InsertStmt;
@@ -16,11 +17,10 @@ import minidb.storage.Storage.Column;
 
 public final class Executor {
     private final Path dir;
-    private final Map<String, Long> nextId = new HashMap<>(); // 테이블별 다음 _id, 처음 쓸 때 CSV를 스캔해 채움
-
-    // 테이블별 _id 인덱스(_id → CSV 바이트 오프셋). 그 테이블에 처음 INSERT할 때 만든다.
-    // 지금은 이번 실행에서 INSERT한 행만 들어 있고, 아직 조회에 쓰이지 않는다.
+    // 테이블별 _id 인덱스(_id → CSV 바이트 오프셋)와 다음 _id.
+    // 그 테이블의 인덱스가 처음 필요할 때(첫 INSERT 또는 첫 _id 조회) CSV를 한 번 훑어 둘 다 채우고, 이후에는 재사용한다.
     private final Map<String, BPlusTree> indexes = new HashMap<>();
+    private final Map<String, Long> nextId = new HashMap<>();
 
     /** 인덱스 노드당 최대 키 개수. 벤치마크 전까지의 임시값. */
     private static final int INDEX_MAX_KEYS = 128;
@@ -49,7 +49,7 @@ public final class Executor {
         }
         // CSV에 먼저 쓰고, 성공했을 때만 인덱스에 등록한다(쓰기가 실패하면 트리는 그대로).
         long offset = Storage.appendRow(dir, s.table(), row);
-        indexes.computeIfAbsent(s.table(), t -> new BPlusTree(INDEX_MAX_KEYS)).insert(id, offset);
+        index(s.table()).insert(id, offset);
     }
 
     /** SELECT의 결과: schema 순서의 컬럼 이름과 CSV의 모든 행. */
@@ -76,14 +76,59 @@ public final class Executor {
         }
 
         List<List<String>> rows = new ArrayList<>();
-        for (List<String> r : Storage.readRows(dir, s.table())) {
-            if (whereIdx >= 0 && !matches(all.get(whereIdx), r.get(whereIdx), s.where().value())) continue;
-            List<String> out = new ArrayList<>();
-            for (int i : picked) out.add(r.get(i));
-            rows.add(out);
+        if (whereIdx == 0) { // WHERE _id = n: 인덱스로 그 행 하나만 읽는다
+            List<String> r = findById(s.table(), Long.parseLong(s.where().value().value()));
+            if (r != null) rows.add(pick(r, picked));
+        } else { // 그 외에는 CSV 전체를 훑는다
+            for (List<String> r : Storage.readRows(dir, s.table())) {
+                if (whereIdx >= 0 && !matches(all.get(whereIdx), r.get(whereIdx), s.where().value())) continue;
+                rows.add(pick(r, picked));
+            }
         }
         List<String> header = picked.stream().map(i -> all.get(i).name()).toList();
         return new QueryResult(header, rows);
+    }
+
+    private static List<String> pick(List<String> row, List<Integer> picked) {
+        List<String> out = new ArrayList<>();
+        for (int i : picked) out.add(row.get(i));
+        return out;
+    }
+
+    /** 인덱스로 찾은 행, 없으면 null. 읽은 행의 _id가 찾던 값이 아니면 오류(실행 중 CSV가 바뀐 경우 등). */
+    private List<String> findById(String table, long id) throws DbException {
+        OptionalLong offset = index(table).search(id);
+        if (offset.isEmpty()) return null;
+        List<String> row = Storage.readRowAt(dir, table, offset.getAsLong());
+        boolean same;
+        try {
+            same = Long.parseLong(row.get(0)) == id;
+        } catch (NumberFormatException e) {
+            same = false;
+        }
+        if (!same) {
+            throw new DbException(table + ".csv: 인덱스가 가리킨 위치의 행이 _id " + id + "가 아닙니다(실행 중 파일이 바뀌었을 수 있습니다)");
+        }
+        return row;
+    }
+
+    /** 테이블의 인덱스. 처음 부를 때 CSV를 한 번 훑어 만들고 다음 _id도 함께 정한다. 실패하면 아무것도 저장하지 않는다. */
+    private BPlusTree index(String table) throws DbException {
+        BPlusTree cached = indexes.get(table);
+        if (cached != null) return cached;
+        BPlusTree tree = new BPlusTree(INDEX_MAX_KEYS);
+        long[] max = {0};
+        Storage.scanIds(dir, table, (id, offset) -> {
+            try {
+                tree.insert(id, offset);
+            } catch (IllegalArgumentException e) {
+                throw new DbException(table + ".csv: 중복된 _id " + id);
+            }
+            max[0] = Math.max(max[0], id);
+        });
+        indexes.put(table, tree);
+        nextId.put(table, max[0] + 1);
+        return tree;
     }
 
     /** schema의 컬럼(시스템 _id 제외). 없는 테이블이거나 _id와 이름이 겹치면 오류. */
@@ -134,21 +179,8 @@ public final class Executor {
 
     /** id를 하나 예약한다. appendRow가 실패하면 그 id는 건너뛰어진다(중복은 없음). */
     private long takeId(String table) throws DbException {
-        Long cached = nextId.get(table);
-        long id;
-        if (cached != null) {
-            id = cached;
-        } else {
-            long max = 0;
-            for (List<String> r : Storage.readRows(dir, table)) {
-                try {
-                    max = Math.max(max, Long.parseLong(r.get(0)));
-                } catch (NumberFormatException e) {
-                    throw new DbException(table + ".csv: 잘못된 id \"" + r.get(0) + "\"");
-                }
-            }
-            id = max + 1;
-        }
+        index(table); // nextId가 채워져 있도록
+        long id = nextId.get(table);
         nextId.put(table, id + 1);
         return id;
     }

@@ -158,4 +158,62 @@ class ExecutorTest {
         assertThrows(DbException.class, () -> e.insert(new InsertStmt("bad", List.of(N20, KIM))));
         assertThrows(DbException.class, () -> e.select(new SelectStmt("bad")));
     }
+
+    static SelectStmt byId(long id) {
+        return sel(List.of("*"), "_id", new Token(NUMBER, String.valueOf(id)));
+    }
+
+    /** 실행 전부터 CSV에 있던 행(재구축)과 이번 실행에서 넣은 행(INSERT 등록) 모두 _id로 찾는다. */
+    @Test
+    void selectByIdFindsExistingAndNewRows() throws DbException {
+        Storage.appendRow(dir, "students", List.of("1", "김철수", "30"));
+        Storage.appendRow(dir, "students", List.of("5", "줄\n바꿈, \"따옴표\"", "31"));
+        Storage.appendRow(dir, "students", List.of("3", "old", "32"));
+        var e = new Executor(dir);
+        assertEquals(List.of(List.of("5", "줄\n바꿈, \"따옴표\"", "31")), e.select(byId(5)).rows());
+        assertEquals(List.of(List.of("1", "김철수", "30")), e.select(byId(1)).rows());
+        assertEquals(List.of(List.of("3", "old", "32")), e.select(byId(3)).rows());
+        assertTrue(e.select(byId(2)).rows().isEmpty());
+
+        e.insert(ins("students", new Token(STRING, "이영희"), N20)); // 조회로 인덱스를 만든 뒤의 INSERT도 최대 _id 다음 번호
+        e.insert(ins("students", LEE, N20));
+        assertEquals(List.of(List.of("6", "이영희", "20")), e.select(byId(6)).rows());
+        assertEquals(List.of(List.of("7", "lee", "20")), e.select(byId(7)).rows());
+        assertEquals(List.of(List.of("3", "old", "32")), e.select(byId(3)).rows());
+        assertEquals(List.of(List.of("lee")), e.select(sel(List.of("name"), "_ID", new Token(NUMBER, "007"))).rows());
+    }
+
+    /** 인덱스를 타는 증거: 다른 행의 _id를 망가뜨리면 전체를 훑는 조회는 실패하지만 _id 조회는 그 행만 읽으므로 성공한다. */
+    @Test
+    void selectByIdReadsOnlyThatRow() throws Exception {
+        seed();
+        var e = new Executor(dir);
+        assertEquals(List.of(List.of("2", "lee", "21")), e.select(byId(2)).rows()); // 여기서 인덱스가 만들어진다
+        Files.writeString(dir.resolve("students.csv"), "x,kim,20\n2,lee,21\n3,kim,22\n"); // 길이는 그대로, 1번 행의 _id만 깨뜨림
+
+        assertEquals(List.of(List.of("2", "lee", "21")), e.select(byId(2)).rows());
+        assertEquals(List.of(List.of("3", "kim", "22")), e.select(byId(3)).rows());
+        assertThrows(DbException.class, () -> new Executor(dir).select(byId(2)), "새로 훑으면 깨진 행에서 실패해야 함");
+    }
+
+    @Test
+    void duplicateIdInCsvIsError() throws DbException {
+        Storage.appendRow(dir, "students", List.of("1", "a", "20"));
+        Storage.appendRow(dir, "students", List.of("2", "b", "20"));
+        Storage.appendRow(dir, "students", List.of("1", "c", "20"));
+        var ex = assertThrows(DbException.class, () -> new Executor(dir).select(byId(2)));
+        assertTrue(ex.getMessage().contains("중복"), ex.getMessage());
+        assertThrows(DbException.class, () -> new Executor(dir).insert(ins("students", KIM, N20)));
+        assertEquals(3, Storage.readRows(dir, "students").size(), "실패한 INSERT가 저장됨");
+    }
+
+    /** 실행 중 CSV가 바뀌어 오프셋이 다른 행을 가리키면 엉뚱한 행을 돌려주지 않고 오류. */
+    @Test
+    void rowAtOffsetWithDifferentIdIsError() throws Exception {
+        seed();
+        var e = new Executor(dir);
+        e.select(byId(1));
+        Files.writeString(dir.resolve("students.csv"), "9,kim,20\n2,lee,21\n3,kim,22\n");
+        assertThrows(DbException.class, () -> e.select(byId(1)));
+    }
 }
