@@ -2,6 +2,7 @@ package minidb;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import minidb.executor.Executor;
@@ -10,6 +11,7 @@ import minidb.parser.InsertStmt;
 import minidb.parser.Parser;
 import minidb.parser.SelectStmt;
 import minidb.parser.Statement;
+import minidb.storage.Storage;
 
 public final class Main {
     private static final Path DATA_DIR = Path.of("data"); // 실행 위치 기준
@@ -33,7 +35,22 @@ public final class Main {
             err.println("오류: " + e);
             return 1;
         }
-        Parser.Result parsed = Parser.parse(src);
+        FileChannel dataLock; // 실행하는 동안 다른 CLI·서버가 같은 data를 쓰지 못하게
+        try {
+            dataLock = Storage.lockDataDir(dataDir);
+        } catch (DbException ex) {
+            err.println("오류: " + ex.getMessage());
+            return 1;
+        }
+        try (dataLock) {
+            return runStatements(Parser.parse(src), dataDir, out, err);
+        } catch (IOException ex) {
+            err.println("오류: 데이터 디렉터리 락을 풀 수 없습니다: " + ex);
+            return 1;
+        }
+    }
+
+    private static int runStatements(Parser.Result parsed, Path dataDir, PrintStream out, PrintStream err) {
         Executor e = new Executor(dataDir);
         int i = 0;
         for (Statement s : parsed.stmts()) {

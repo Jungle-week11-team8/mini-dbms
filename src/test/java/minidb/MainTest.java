@@ -126,4 +126,15 @@ class MainTest {
         assertEquals(1, Main.run(new String[0], data(), o, o));
         assertEquals(1, Main.run(new String[] {dir.resolve("missing.sql").toString()}, data(), o, o));
     }
+
+    @Test
+    void failsWithoutRunningWhenDataDirIsLocked() throws Exception {
+        Files.createDirectories(data());
+        try (var lock = minidb.storage.Storage.lockDataDir(data())) {
+            assertEquals(1, runSql("INSERT INTO students VALUES ('kim');"));
+        }
+        assertTrue(errOut.toString(UTF_8).contains("사용 중"), errOut.toString(UTF_8));
+        assertFalse(Files.exists(data().resolve("students.csv")), "락을 못 잡았는데 실행됨");
+        assertEquals(0, runSql("INSERT INTO students VALUES ('kim');"), "락이 풀린 뒤에는 실행돼야 함");
+    }
 }
