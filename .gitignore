@@ -5,3 +5,4 @@
 build/
 .idea
 data/students.csv
+data/*.csv
