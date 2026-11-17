@@ -37,3 +37,12 @@ tasks.register('bench', JavaExec) {
     maxHeapSize = '2g' // 선형 탐색이 100만 행을 통째로 메모리에 올린다
     jvmArgs '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
 }
+
+// API 서버 실행: ./gradlew server
+tasks.register('server', JavaExec) {
+    group = 'application'
+    description = 'minidb API 서버를 띄운다 (POST /query, 기본 127.0.0.1:8080, data/는 프로젝트 루트 기준)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'minidb.server.ApiServer'
+    jvmArgs '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}

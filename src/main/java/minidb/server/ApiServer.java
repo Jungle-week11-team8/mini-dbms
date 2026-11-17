@@ -33,15 +33,27 @@ public final class ApiServer {
         this.dataLock = dataLock;
     }
 
+    /** 127.0.0.1(이 컴퓨터에서만 접근):8080에 띄운다. */
     public static void main(String[] args) {
         Path dataDir = Path.of("data"); // 실행 위치 기준(CLI와 같음)
+        ApiServer s;
         try {
-            ApiServer s = startServer(DEFAULT_HOST, DEFAULT_PORT, dataDir);
-            System.out.println("minidb API 서버: http://" + DEFAULT_HOST + ":" + s.port() + "/query (data: " + dataDir + ")");
+            s = startServer(DEFAULT_HOST, DEFAULT_PORT, dataDir);
         } catch (DbException | IOException e) {
             System.err.println("오류: " + e.getMessage());
             System.exit(1);
+            return;
         }
+        // Ctrl+C·kill: 새 요청을 막고 진행 중인 요청(CSV 쓰기)이 끝나기를 기다린 뒤 종료
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                s.stopServer();
+                System.out.println("minidb API 서버 종료");
+            } catch (IOException e) {
+                System.err.println("오류: 종료 중 " + e);
+            }
+        }));
+        System.out.println("minidb API 서버: http://" + DEFAULT_HOST + ":" + s.port() + "/query (data: " + dataDir + ")");
     }
 
     /** data 락을 잡고 서버를 띄운다. port가 0이면 빈 포트를 고른다(테스트용). 락을 못 잡으면 DbException. */
