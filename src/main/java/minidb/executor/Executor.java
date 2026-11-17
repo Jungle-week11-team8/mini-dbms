@@ -29,8 +29,8 @@ public final class Executor {
         this.dir = dir;
     }
 
-    /** _id는 자동 부여하고, VALUES에는 schema의 사용자 컬럼만 순서대로 받는다. */
-    public void insert(InsertStmt s) throws DbException {
+    /** _id는 자동 부여하고, VALUES에는 schema의 사용자 컬럼만 순서대로 받는다. 부여한 _id를 돌려준다. */
+    public long insert(InsertStmt s) throws DbException {
         List<Column> cols = loadUserColumns(s.table());
         if (s.values().size() != cols.size()) {
             throw new DbException(s.table() + ": 값 " + cols.size() + "개가 필요한데 " + s.values().size() + "개가 왔습니다");
@@ -46,6 +46,7 @@ public final class Executor {
             // CSV에 먼저 쓰고, 성공했을 때만 인덱스에 등록한다(쓰기가 실패하면 트리는 그대로).
             long offset = Storage.appendRow(dir, s.table(), row);
             table.ensureIndexLoaded().insert(id, offset);
+            return id;
         }
     }
 
