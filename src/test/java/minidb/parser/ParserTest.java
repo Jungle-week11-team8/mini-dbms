@@ -23,7 +23,12 @@ class ParserTest {
                 "INSERT students VALUES ('kim');",
                 "INSERT INTO students VALUES ();",
                 "INSERT INTO students VALUES ('a' 'b');",
-                "SELECT name FROM students;", // 이번 유닛은 * 만
+                "SELECT FROM students;",
+                "SELECT name, FROM students;",
+                "SELECT * FROM students WHERE age 20;",
+                "SELECT * FROM students WHERE age = ;",
+                "SELECT * FROM students WHERE age = name;",
+                "SELECT * FROM students WHERE age = 20 AND name = 'a';", // 조건은 1개만
                 "SELECT * students;",
                 "SELECT * FROM students", // ; 없음
                 "DELETE FROM students;",
@@ -39,6 +44,24 @@ class ParserTest {
         assertEquals(List.of(
                 new InsertStmt("students", List.of(new Token(STRING, "kim"))),
                 new SelectStmt("students")), r.stmts());
+    }
+
+    @Test
+    void parseSelectColumnsAndWhere() {
+        var r = Parser.parse("SELECT name, Age FROM students WHERE age = 20;\nselect * from students where name = 'kim';");
+        assertNull(r.error());
+        assertEquals(List.of(
+                new SelectStmt("students", List.of("name", "Age"), new SelectStmt.Where("age", new Token(NUMBER, "20"))),
+                new SelectStmt("students", List.of("*"), new SelectStmt.Where("name", new Token(STRING, "kim")))), r.stmts());
+    }
+
+    @Test
+    void parseStarAnywhereInColumnList() {
+        var r = Parser.parse("SELECT name, * FROM t;\nSELECT *, *, age FROM t;");
+        assertNull(r.error());
+        assertEquals(List.of(
+                new SelectStmt("t", List.of("name", "*"), null),
+                new SelectStmt("t", List.of("*", "*", "age"), null)), r.stmts());
     }
 
     @Test

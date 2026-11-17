@@ -21,8 +21,19 @@ tasks.withType(JavaCompile).configureEach {
 
 application {
     mainClass = 'minidb.Main'
+    applicationDefaultJvmArgs = ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8']
 }
 
 tasks.test {
     useJUnitPlatform()
+}
+
+// 100만 건 인덱스 대 선형 탐색 속도 비교. 일반 테스트와 분리: ./gradlew bench
+tasks.register('bench', JavaExec) {
+    group = 'verification'
+    description = '100만 건에서 _id 인덱스 조회와 선형 탐색의 속도를 비교한다 (결과: build/bench/result.txt)'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'minidb.bench.Benchmark'
+    maxHeapSize = '2g' // 선형 탐색이 100만 행을 통째로 메모리에 올린다
+    jvmArgs '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
 }

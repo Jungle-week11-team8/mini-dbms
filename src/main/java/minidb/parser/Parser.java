@@ -71,12 +71,43 @@ public final class Parser {
         return name.value();
     }
 
+    private boolean accept(Kind kind, String value) {
+        if (pos < toks.size() && toks.get(pos).equals(new Token(kind, value))) {
+            pos++;
+            return true;
+        }
+        return false;
+    }
+
+    private String columnName() throws SyntaxError {
+        Token c = next();
+        if (c == null || c.kind() != Kind.IDENT) throw new SyntaxError("컬럼 이름이 필요합니다");
+        return c.value();
+    }
+
+    private Token value() throws SyntaxError {
+        Token v = next();
+        if (v == null || (v.kind() != Kind.NUMBER && v.kind() != Kind.STRING)) {
+            throw new SyntaxError("값(숫자 또는 '문자열')이 필요합니다");
+        }
+        return v;
+    }
+
     private SelectStmt select() throws SyntaxError {
-        expect(Kind.SYMBOL, "*");
+        List<String> columns = new ArrayList<>(); // "*"는 전체 컬럼 자리표시
+        do {
+            columns.add(accept(Kind.SYMBOL, "*") ? "*" : columnName());
+        } while (accept(Kind.SYMBOL, ","));
         expect(Kind.KEYWORD, "FROM");
         String table = tableName();
+        SelectStmt.Where where = null;
+        if (accept(Kind.KEYWORD, "WHERE")) {
+            String column = columnName();
+            expect(Kind.SYMBOL, "=");
+            where = new SelectStmt.Where(column, value());
+        }
         expect(Kind.SYMBOL, ";");
-        return new SelectStmt(table);
+        return new SelectStmt(table, List.copyOf(columns), where);
     }
 
     private InsertStmt insert() throws SyntaxError {
@@ -86,11 +117,7 @@ public final class Parser {
         expect(Kind.SYMBOL, "(");
         List<Token> values = new ArrayList<>();
         while (true) {
-            Token v = next();
-            if (v == null || (v.kind() != Kind.NUMBER && v.kind() != Kind.STRING)) {
-                throw new SyntaxError("값(숫자 또는 '문자열')이 필요합니다");
-            }
-            values.add(v);
+            values.add(value());
             Token sep = next();
             if (new Token(Kind.SYMBOL, ")").equals(sep)) break;
             if (!new Token(Kind.SYMBOL, ",").equals(sep)) throw new SyntaxError("',' 또는 ')'가 필요합니다");
