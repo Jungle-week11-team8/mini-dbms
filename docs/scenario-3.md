@@ -17,7 +17,7 @@
 | 완료 조건    | 결과 | 테스트                                            |
 |----------| --- |------------------------------------------------|
 | 조회·삽입    | `POST /query` ([매뉴얼](manual.md#api)) | `ApiServerTest`                                |
-| 서로 영향 없음 | 테이블별 배타 락, `data/.lock` ([개념](concepts.md#3-동시성-phase-3)) | `ExecutorTest`: 8스레드 동시 INSERT에서 `_id` 중복·행 깨짐 없음 |
+| 서로 영향 없음 | 테이블별 배타 락, `data/.lock` ([설계](design.md#3-동시성-phase-3)) | `ExecutorTest`: 8스레드 동시 INSERT에서 `_id` 중복·행 깨짐 없음 |
 | 오류 메시지   | `{"error":"..."}` + 상태 코드 400/404/405/413/500 | `ApiServerTest`                                |
 
 

@@ -80,11 +80,17 @@ SELECT <* | 컬럼, ...> FROM <table> [WHERE <컬럼> = <값>];
 
 <br/>
 
+### 파일 저장 방식
+- 테이블마다 `<table>.schema`(JSON)와 `<table>.csv`(헤더 없음)를 둡니다.
+
+<br/>
+
 ### 시스템 컬럼 `_id`
 모든 테이블에 자동으로 붙는 INT 컬럼입니다.
 - INSERT 때 자동 부여 → VALUES에는 `.schema`의 컬럼만 순서대로 넣습니다.
 - `.schema`에는 적지 않습니다(같은 이름이면 오류). CSV에는 첫 필드로 저장됩니다.
 - `WHERE _id = n`은 설정 없이 B+ 트리 인덱스로 조회합니다.
+
 
 ```sql
 SELECT name, * FROM students WHERE _id = 2;   -- * 는 어디든, 여러 번 쓸 수 있음 (_id는 * 맨 앞)
