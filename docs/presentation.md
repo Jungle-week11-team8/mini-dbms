@@ -33,18 +33,9 @@
 ## API 서버
 > `POST /query` 하나로 SQL 1문장 실행, CLI와 같은 엔진 사용
 
-### 구조
-| 패키지 | 클래스 | 역할 |
-| --- | --- | --- |
-| `server/` | `ApiServer`, `QueryHandler` | HTTP 입출력 |
-| `parser/` | `Lexer`, `Parser` | SQL 해석 |
-| `executor/` | `Executor`, `TableState` | 쿼리 실행, 동시성 제어 |
-| `storage/` | `Storage` | 파일 읽기/쓰기 |
-| `index/` | `BPlusTree` | `_id` 인덱스 |
-
 <br/>
 
-![구조](images/architecture.svg)
+![구조](images/architecture.png)
 
 ### 하나의 요청 시 처리 흐름
 | 단계 | 하는 일 | 실패 시 |
