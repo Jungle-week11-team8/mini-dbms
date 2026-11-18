@@ -46,7 +46,7 @@
 
 ![구조](images/architecture.svg)
 
-### 요청 처리 흐름
+### 하나의 요청 시 처리 흐름
 | 단계 | 하는 일 | 실패 시 |
 | --- | --- | --- |
 | 받기 | JDK `HttpServer` 요청 받음 + 고정 스레드 8개 중 하나가 `QueryHandler` 실행| - |
