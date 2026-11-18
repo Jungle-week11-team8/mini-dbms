@@ -6,3 +6,4 @@ build/
 .idea
 data/students.csv
 data/*.csv
+data/.lock

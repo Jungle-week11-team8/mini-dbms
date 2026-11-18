@@ -207,6 +207,52 @@ class ExecutorTest {
         assertEquals(3, Storage.readRows(dir, "students").size(), "실패한 INSERT가 저장됨");
     }
 
+    /**
+     * Executor 하나를 8스레드가 공유: 두 테이블에 동시에 INSERT하고 사이사이 _id 조회.
+     * 모두 동시에 출발해서 인덱스 지연 생성·id 예약·파일 끝 쓰기가 실제로 겹친다.
+     */
+    @Test
+    void concurrentInsertsKeepIdsUniqueAndRowsIntact() throws Exception {
+        Files.writeString(dir.resolve("teachers.schema"), "{\"columns\":[{\"name\":\"name\",\"type\":\"TEXT\"}]}");
+        Storage.appendRow(dir, "students", List.of("10", "old", "30")); // 기존 행 다음 번호부터 이어지는지도 확인
+        var e = new Executor(dir);
+        int threads = 8, perThread = 200;
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+        for (int t = 0; t < threads; t++) {
+            String name = "t" + t;
+            futures.add(pool.submit(() -> {
+                start.await();
+                for (int i = 0; i < perThread; i++) {
+                    e.insert(ins("students", new Token(STRING, name + "," + i), N20)); // 쉼표: 따옴표로 쓰이는 행도 섞음
+                    e.insert(ins("teachers", new Token(STRING, name)));
+                    e.select(byId(10));
+                }
+                return null;
+            }));
+        }
+        start.countDown();
+        for (var f : futures) f.get();
+        pool.shutdown();
+
+        int total = threads * perThread;
+        List<List<String>> students = Storage.readRows(dir, "students");
+        assertEquals(total + 1, students.size());
+        assertEquals(total, Storage.readRows(dir, "teachers").size());
+        var ids = new java.util.TreeSet<Long>();
+        for (List<String> r : students) {
+            assertEquals(3, r.size(), "깨진 행: " + r);
+            ids.add(Long.parseLong(r.get(0)));
+        }
+        assertEquals(total + 1, ids.size(), "_id 중복");
+        assertEquals(10L, ids.first());
+        assertEquals(10L + total, ids.last(), "_id 건너뜀");
+        for (List<String> r : students) {
+            assertEquals(List.of(r), e.select(byId(Long.parseLong(r.get(0)))).rows()); // 인덱스 오프셋도 정확
+        }
+    }
+
     /** 실행 중 CSV가 바뀌어 오프셋이 다른 행을 가리키면 엉뚱한 행을 돌려주지 않고 오류. */
     @Test
     void rowAtOffsetWithDifferentIdIsError() throws Exception {

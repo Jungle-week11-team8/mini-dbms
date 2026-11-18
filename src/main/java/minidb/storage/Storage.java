@@ -7,6 +7,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +30,37 @@ public final class Storage {
     public record Schema(List<Column> columns) {}
 
     private Storage() {}
+
+    /**
+     * data/.lock에 OS 파일 락을 걸어 이 프로세스만 data 디렉터리를 쓰게 한다. 기다리지 않고, 이미 잡혀 있으면 바로 오류.
+     * 돌려받은 채널을 닫으면 풀리고, 프로세스가 죽어도(크래시 포함) OS가 푼다. .lock 파일 자체는 남아도 무해하다.
+     */
+    public static FileChannel lockDataDir(Path dir) throws DbException {
+        FileChannel ch;
+        try {
+            ch = FileChannel.open(dir.resolve(".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        } catch (IOException e) {
+            throw new DbException("데이터 디렉터리 락 파일을 열 수 없습니다: " + e, e);
+        }
+        try {
+            if (ch.tryLock() != null) return ch;
+        } catch (OverlappingFileLockException e) {
+            // 같은 JVM 안에서 이미 잡고 있음: 다른 프로세스와 같은 상황으로 취급
+        } catch (IOException e) {
+            closeQuietly(ch);
+            throw new DbException("데이터 디렉터리를 잠글 수 없습니다: " + e, e);
+        }
+        closeQuietly(ch);
+        throw new DbException("다른 프로세스가 데이터 디렉터리(" + dir + ")를 사용 중입니다");
+    }
+
+    private static void closeQuietly(FileChannel ch) {
+        try {
+            ch.close();
+        } catch (IOException ignored) {
+            // 락을 못 잡은 채널이라 닫기 실패는 상관없음
+        }
+    }
 
     public static Schema loadSchema(Path dir, String table) throws DbException {
         // macOS/Windows 파일시스템은 대소문자를 무시하므로 디렉터리 목록에서 정확한 이름을 확인한다.

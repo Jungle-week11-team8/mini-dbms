@@ -94,4 +94,13 @@ class StorageTest {
         Files.writeString(dir.resolve("open.csv"), "1,\"안 닫힘\n");
         assertThrows(DbException.class, () -> Storage.scanIds(dir, "open", (id, offset) -> {}));
     }
+
+    @Test
+    void lockDataDirIsExclusiveUntilClosed() throws Exception {
+        try (var lock = Storage.lockDataDir(dir)) {
+            var ex = assertThrows(DbException.class, () -> Storage.lockDataDir(dir));
+            assertTrue(ex.getMessage().contains("사용 중"), ex.getMessage());
+        }
+        Storage.lockDataDir(dir).close(); // 닫으면 다시 잡힌다
+    }
 }
